@@ -1,0 +1,19 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Runtime data (artifact workspace)
+backend/var/
+
+# Local tooling output
+.playwright-mcp/
+.claude/settings.local.json
+.claude/
+skills-lock.json
