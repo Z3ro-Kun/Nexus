@@ -34,7 +34,7 @@ import json
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.agents.planner import PlannedTask, describe_agent_tools, validate_plan_graph, validate_plan_policy
 from app.agents.reasoning import AgentSpec
@@ -54,8 +54,14 @@ from app.tools.schemas import ToolDefinition
 
 
 class ReplanTask(PlannedTask):
-    # The failed task this one replaces, or null. Exactly one task per replan sets it.
+    # The failed task this one replaces, or None. The provider wire schema uses an empty
+    # string for None because some OpenAI-compatible constrained decoders mishandle unions.
     replaces: str | None = Field(max_length=128)
+
+    @field_validator("replaces", mode="before")
+    @classmethod
+    def normalize_no_replacement(cls, value: Any) -> Any:
+        return None if value == "" else value
 
 
 class ReplannerOutput(BaseModel):
@@ -278,7 +284,7 @@ the files (case 1).
 files' verified content; never from task summaries, or an agent's own knowledge \
 presented as fact.
 - A failed verification is not a reason to produce deliverables the user did not ask for.
-- Every task sets "replaces" to null, including a task that fixes an earlier task's \
+- Every task sets "replaces" to an empty string (meaning null), including a task that fixes an earlier task's \
 deliverable: it does not replace that task, it depends on it.
 - ids: new, unique, lowercase letters, digits and underscores, starting with a letter; \
 they must not collide with existing task ids.
@@ -307,7 +313,7 @@ Rules:
 - At most {max_tasks} new tasks. Prefer a single replacement task.
 - Exactly one task must set "replaces" to the failed task id ("{failed_task_id}"). Tasks \
 that depended on the failed task will use that task's result instead. Every other task \
-sets "replaces" to null.
+sets "replaces" to an empty string (meaning null).
 - Every other new task must be something the replacement depends on (directly or through \
 other new tasks). Do not re-create tasks that depended on the failed task: they already \
 exist and will run on the replacement's result.
@@ -355,10 +361,12 @@ class ReplannerAgent:
         )
 
     def output_schema(self, *, failed_task_id: str | None = None, remediation: bool = False) -> dict[str, Any]:
-        """ReplannerOutput's schema, narrowed to what a valid proposal can contain. `replaces`
-        can only be null in remediation (NEXUS re-creates the checkpoint), and only null or
-        the failed task in a replacement plan. A hint to the model: the gates below still
-        decide (exactly one replacement, every other task feeds it)."""
+        """Narrow the provider schema to valid replacements using a simple string enum.
+
+        Some compatible constrained decoders mishandle nullable unions in `anyOf` and
+        reject a valid generated replacement string against the null branch. Empty string
+        normalizes to None before deterministic validation.
+        """
         schema = strict_json_schema(ReplannerOutput)
         task_props = schema["$defs"]["ReplanTask"]["properties"]
         task_props["agent_type"]["enum"] = sorted(s.agent_type for s in self._specs)
@@ -366,9 +374,9 @@ class ReplannerAgent:
             frozenset().union(*(s.task_types for s in self._specs))
         )
         if remediation:
-            task_props["replaces"] = {"type": "null"}
+            task_props["replaces"] = {"type": "string", "enum": [""]}
         elif failed_task_id is not None:
-            task_props["replaces"] = {"anyOf": [{"type": "string", "enum": [failed_task_id]}, {"type": "null"}]}
+            task_props["replaces"] = {"type": "string", "enum": [failed_task_id, ""]}
         return schema
 
     async def replan(

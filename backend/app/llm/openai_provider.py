@@ -33,6 +33,7 @@ from typing import Any, Literal
 import openai
 
 from app.core.exceptions import LLMContentFilteredError, LLMError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
+from app.llm.error_details import provider_error_detail
 from app.llm.schemas import LLMRequest, LLMResponse, LLMUsage
 
 logger = logging.getLogger(__name__)
@@ -333,9 +334,11 @@ class OpenAIProvider:
                 f"(HTTP 429, request {exc.request_id}); a provider availability problem, not a task problem"
             ) from exc
         except openai.APIStatusError as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
             raise LLMError(
                 f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
-                f"({type(exc).__name__}, request {exc.request_id})"
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
             ) from exc
         except openai.APIConnectionError as exc:
             raise LLMError(f"{request.purpose}: could not reach the OpenAI-compatible API") from exc

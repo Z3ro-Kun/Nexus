@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 
 from app.agents.registry import TASK_AGENT_SPECS, AgentRegistry
-from app.agents.replanner import ReplannerAgent, ReplanRejectedError, plan_fingerprint, ReplannerOutput
+from app.agents.replanner import ReplanTask, ReplannerAgent, ReplanRejectedError, plan_fingerprint, ReplannerOutput
 from app.core.exceptions import (
     DependencyCycleError,
     InvalidEventError,
@@ -485,21 +485,35 @@ def test_other_failures_keep_their_recovery_behaviour(failure_type: FailureType,
 def test_replacement_schema_allows_only_the_failed_task_or_null() -> None:
     schema = ReplannerAgent(FakeLLMProvider(), TASK_AGENT_SPECS, max_tokens=10).output_schema(failed_task_id=A)
     assert schema["$defs"]["ReplanTask"]["properties"]["replaces"] == {
-        "anyOf": [{"type": "string", "enum": [A]}, {"type": "null"}]}
+        "type": "string", "enum": [A, ""]}
 
 
 def test_remediation_schema_allows_only_null() -> None:
     schema = ReplannerAgent(FakeLLMProvider(), TASK_AGENT_SPECS, max_tokens=10).output_schema(remediation=True)
-    assert schema["$defs"]["ReplanTask"]["properties"]["replaces"] == {"type": "null"}
+    assert schema["$defs"]["ReplanTask"]["properties"]["replaces"] == {"type": "string", "enum": [""]}
+
+
+def test_empty_replaces_wire_value_normalizes_to_none() -> None:
+    task = ReplanTask.model_validate({
+        "id": C,
+        "title": "Replacement",
+        "task_type": "research",
+        "agent_type": "researcher",
+        "description": "Use a different source to complete the failed research task.",
+        "dependencies": [],
+        "replaces": "",
+    })
+    assert task.replaces is None
 
 
 async def test_replan_request_carries_the_narrowed_schema() -> None:
     _, llm = await propose(SOURCE_C_REPLAN)
     [request] = llm.requests
-    assert request.output_schema["$defs"]["ReplanTask"]["properties"]["replaces"]["anyOf"][0]["enum"] == [A]
+    assert request.output_schema["$defs"]["ReplanTask"]["properties"]["replaces"] == {
+        "type": "string", "enum": [A, ""]}
 
 
 async def test_null_replaces_on_dependencies_of_the_replacement_is_valid() -> None:
-    chain = replan("two steps", replan_task("fetch_c"), replan_task(C, replaces=A, dependencies=["fetch_c"]))
+    chain = replan("two steps", replan_task("fetch_c", replaces=""), replan_task(C, replaces=A, dependencies=["fetch_c"]))
     proposal, _ = await propose(chain)
     assert [(t.id, t.replaces) for t in proposal.tasks] == [("fetch_c", None), (C, A)]

@@ -628,12 +628,31 @@ async def test_collapsed_schema_does_not_weaken_claim_validation() -> None:
 
 
 async def test_schema_rejection_error_does_not_expose_the_key(caplog: pytest.LogCaptureFixture) -> None:
-    provider, _ = adapter(status_error(openai.BadRequestError, 400))
+    error = openai.BadRequestError(
+        "bad request",
+        response=httpx2.Response(400, request=REQ),
+        body={"error": {"message": "Invalid schema: unsupported keyword", "code": "invalid_schema"}},
+    )
+    provider, _ = adapter(error)
 
-    with pytest.raises(LLMError, match="400") as caught:
+    with pytest.raises(LLMError, match="400.*Invalid schema.*unsupported keyword") as caught:
         await provider.generate(request(REPORT_SCHEMA))
 
     assert FAKE_KEY not in str(caught.value) and FAKE_KEY not in caplog.text
+
+
+async def test_provider_error_detail_is_redacted_and_bounded() -> None:
+    body = {"error": {"message": "invalid schema api_key=sk-test-not-a-real-key " + "x" * 900}}
+    error = openai.BadRequestError("bad request", response=httpx2.Response(400, request=REQ), body=body)
+    provider, _ = adapter(error)
+
+    with pytest.raises(LLMError) as caught:
+        await provider.generate(request(REPORT_SCHEMA))
+
+    message = str(caught.value)
+    assert "[REDACTED]" in message
+    assert FAKE_KEY not in message
+    assert len(message) < 800
 
 
 # --- Request shape -------------------------------------------------------------------------

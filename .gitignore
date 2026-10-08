@@ -17,3 +17,4 @@ backend/var/
 .claude/settings.local.json
 .claude/
 skills-lock.json
+.agents/

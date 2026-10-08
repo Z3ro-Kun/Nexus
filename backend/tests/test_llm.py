@@ -160,6 +160,18 @@ async def test_anthropic_adapter_requests_structured_output() -> None:
     assert "metadata" not in call  # caller labels are never sent
 
 
+async def test_anthropic_bad_request_preserves_safe_provider_detail() -> None:
+    error = anthropic.BadRequestError(
+        "bad request",
+        response=httpx2.Response(400, request=REQ),
+        body={"error": {"message": "Invalid schema: unsupported keyword", "type": "invalid_request_error"}},
+    )
+    provider, _ = adapter(error)
+
+    with pytest.raises(LLMError, match="400.*Invalid schema.*unsupported keyword"):
+        await provider.generate(request())
+
+
 @pytest.mark.parametrize(
     ("outcome", "error", "match"),
     [

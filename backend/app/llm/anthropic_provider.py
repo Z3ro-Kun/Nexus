@@ -12,6 +12,7 @@ import logging
 import anthropic
 
 from app.core.exceptions import LLMContentFilteredError, LLMError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
+from app.llm.error_details import provider_error_detail
 from app.llm.schemas import LLMRequest, LLMResponse, LLMUsage
 
 logger = logging.getLogger(__name__)
@@ -56,9 +57,11 @@ class AnthropicProvider:
                 f"{exc.request_id}); a provider availability problem, not a task problem"
             ) from exc
         except anthropic.APIStatusError as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
             raise LLMError(
                 f"{request.purpose}: Anthropic API error {exc.status_code} "
-                f"({type(exc).__name__}, request {exc.request_id})"
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
             ) from exc
         except anthropic.APIConnectionError as exc:
             raise LLMError(f"{request.purpose}: could not reach the Anthropic API") from exc
