@@ -253,3 +253,30 @@ def test_agent_and_llm_code_has_no_access_to_persistence(package: str) -> None:
                 names = [node.module]
             offenders += [f"{path.name}: {n}" for n in names if n.startswith(FORBIDDEN_IMPORTS)]
     assert offenders == []
+
+
+def test_agent_step_dual_output_sanitized() -> None:
+    from app.agents.result import AgentStep
+    # When action is call_tool and model sends both tool_call and report, report is discarded
+    step = AgentStep.model_validate({
+        "action": "call_tool",
+        "tool_call": {"tool_name": "http_fetch", "arguments": {"url": "https://example.com"}},
+        "report": {"success": True, "summary": "done", "facts": [], "evidence": [], "artifacts": []},
+    })
+    assert step.action == "call_tool"
+    assert step.tool_call is not None
+    assert step.tool_call.tool_name == "http_fetch"
+    assert step.report is None
+
+    # When action is finish and model sends both report and tool_call, tool_call is discarded
+    step2 = AgentStep.model_validate({
+        "action": "finish",
+        "tool_call": {"tool_name": "http_fetch", "arguments": {"url": "https://example.com"}},
+        "report": {"success": True, "summary": "done", "facts": [], "evidence": [], "artifacts": []},
+    })
+    assert step2.action == "finish"
+    assert step2.report is not None
+    assert step2.report.summary == "done"
+    assert step2.tool_call is None
+
+

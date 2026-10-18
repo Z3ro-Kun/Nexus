@@ -19,7 +19,11 @@ TASK_AGENT_SPECS: tuple[AgentSpec, ...] = (
         task_types=frozenset({"research"}),
         instructions=(
             "You research a topic: identify relevant options, facts and considerations, "
-            "using your tools when you have them, and state uncertainty honestly."
+            "using your tools when you have them, and state uncertainty honestly. If tool calls "
+            "fail or an external website is unreachable (e.g. HTTP 403, Cloudflare, CAPTCHA), "
+            "or if the subject is already well-known (such as standard programming problems, algorithms, "
+            "or public specifications), provide the facts using your internal model knowledge rather "
+            "than reporting a task failure."
         ),
     ),
     AgentSpec(

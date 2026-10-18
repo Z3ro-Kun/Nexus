@@ -95,6 +95,15 @@ class EventPayload(BaseModel):
     event_type: ClassVar[EventType]
 
 
+class AttachedDocument(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str = Field(min_length=1, max_length=64)
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(default="text/plain", max_length=100)
+    content: str = Field(max_length=500_000)
+
+
 class RunCreated(EventPayload):
     event_type = EventType.RUN_CREATED
     goal: str = Field(min_length=1)
@@ -102,6 +111,7 @@ class RunCreated(EventPayload):
     constraints: list[Annotated[str, StringConstraints(min_length=1, max_length=500)]] = Field(
         default_factory=list, max_length=20
     )
+    documents: list[AttachedDocument] = Field(default_factory=list, max_length=20)
 
 
 class Evidence(BaseModel):
@@ -252,7 +262,7 @@ class EvidenceRef(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    kind: Literal["task", "fact", "artifact", "tool_call", "conflict"]
+    kind: Literal["task", "fact", "artifact", "tool_call", "conflict", "document"]
     id: Identifier
 
 

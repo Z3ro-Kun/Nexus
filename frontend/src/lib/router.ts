@@ -1,19 +1,25 @@
 /**
- * Minimal client-side routing on the History API: "/" (objective) and "/runs/:runId"
- * (execution view). The Vite dev and preview servers fall back to index.html for any path,
- * so a refreshed /runs/:runId loads the app, which reconstructs the run from the backend.
+ * Client-side routing on the History API: "/" (chat), "/c/:conversationId", "/runs/:runId", and "/objective".
  */
 
 import { useSyncExternalStore } from "react";
 
-export type Route = { page: "objective" } | { page: "run"; runId: string } | { page: "not_found" };
+export type Route =
+  | { page: "chat"; conversationId?: string }
+  | { page: "objective" }
+  | { page: "run"; runId: string }
+  | { page: "not_found" };
 
 const RUN_PATH = /^\/runs\/([^/]+)\/?$/;
+const CHAT_PATH = /^\/c\/([^/]+)\/?$/;
 
 export function matchRoute(pathname: string): Route {
-  if (pathname === "/" || pathname === "") return { page: "objective" };
-  const match = RUN_PATH.exec(pathname);
-  if (match) return { page: "run", runId: decodeURIComponent(match[1]) };
+  if (pathname === "/objective") return { page: "objective" };
+  const runMatch = RUN_PATH.exec(pathname);
+  if (runMatch) return { page: "run", runId: decodeURIComponent(runMatch[1]) };
+  const chatMatch = CHAT_PATH.exec(pathname);
+  if (chatMatch) return { page: "chat", conversationId: decodeURIComponent(chatMatch[1]) };
+  if (pathname === "/" || pathname === "") return { page: "chat" };
   return { page: "not_found" };
 }
 
@@ -51,6 +57,10 @@ export function linkTo(path: string) {
 
 export function runPath(runId: string) {
   return `/runs/${encodeURIComponent(runId)}`;
+}
+
+export function chatPath(conversationId: string) {
+  return `/c/${encodeURIComponent(conversationId)}`;
 }
 
 export function useRoute(): Route {

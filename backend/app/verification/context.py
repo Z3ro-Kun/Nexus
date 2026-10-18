@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.artifacts.content import FileText, read_texts
 from app.artifacts.workspace import ArtifactWorkspace
-from app.events.types import FactClaim, VerificationCheck, VerificationSpec
+from app.events.types import AttachedDocument, FactClaim, VerificationCheck, VerificationSpec
 from app.state.models import RunState, TaskStatus
 from app.verification.checks import context_refs, provenance_problem, run_checks
 
@@ -122,6 +122,7 @@ class VerificationContext(_Frozen):
     constraints: tuple[str, ...]
     spec: VerificationSpec
     based_on_sequence: int
+    documents: tuple[AttachedDocument, ...] = ()
     tasks: tuple[CoveredTask, ...]
     facts: tuple[FactItem, ...]
     artifacts: tuple[ArtifactItem, ...]
@@ -132,10 +133,11 @@ class VerificationContext(_Frozen):
 
     def reference_kinds(self) -> dict[str, str]:
         """id -> kind for everything the verifier may cite. On an id collision the more
-        specific kind wins (fact, artifact, tool call, conflict, then task)."""
+        specific kind wins (fact, artifact, tool call, conflict, document, then task)."""
         kinds: dict[str, str] = {}
         for kind, ids in (
             ("task", [t.task_id for t in self.tasks]),
+            ("document", [d.id for d in self.documents]),
             ("conflict", [c.conflict_id for c in self.conflicts]),
             ("tool_call", [c.tool_call_id for c in self.tool_calls]),
             ("artifact", [a.artifact_id for a in self.artifacts]),
@@ -175,6 +177,7 @@ def build_verification_context(
         constraints=state.constraints,
         spec=verification.spec,
         based_on_sequence=state.last_sequence,
+        documents=state.documents,
         tasks=tuple(
             CoveredTask(
                 task_id=t.task_id, title=t.title, description=t.description, agent_type=t.agent_type,

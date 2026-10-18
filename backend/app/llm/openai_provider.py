@@ -32,7 +32,17 @@ from typing import Any, Literal
 
 import openai
 
-from app.core.exceptions import LLMContentFilteredError, LLMError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
+from app.core.exceptions import (
+    LLMAuthenticationError,
+    LLMConnectionError,
+    LLMContentFilteredError,
+    LLMError,
+    LLMInvalidRequestError,
+    LLMProviderUnavailableError,
+    LLMRateLimitError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from app.llm.error_details import provider_error_detail
 from app.llm.schemas import LLMRequest, LLMResponse, LLMUsage
 
@@ -298,9 +308,10 @@ class OpenAIProvider:
         # explicit choice (the server may reject it).
         return schema, self._strict_schema is True
 
-    def _request_kwargs(self, request: LLMRequest) -> dict[str, Any]:
+    def _request_kwargs(self, request: LLMRequest, response_format_override: str | None = None) -> dict[str, Any]:
         system = request.system
-        if self._response_format == "json_schema":
+        fmt = response_format_override or self._response_format
+        if fmt == "json_schema":
             schema, strict = self._wire_schema(request.output_schema)
             response_format: dict[str, Any] = {
                 "type": "json_schema",
@@ -333,15 +344,74 @@ class OpenAIProvider:
                 f"{request.purpose}: the LLM provider is rate-limiting requests for model {self._model!r} "
                 f"(HTTP 429, request {exc.request_id}); a provider availability problem, not a task problem"
             ) from exc
+        except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMAuthenticationError(
+                f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
+        except openai.BadRequestError as exc:
+            # If the provider's server-side schema grammar validator failed (e.g. Groq json_validate_failed),
+            # fall back to json_object mode with the schema embedded in the system prompt.
+            error_code = exc.body.get("error", {}).get("code") if isinstance(exc.body, dict) else None
+            if self._response_format == "json_schema" and error_code == "json_validate_failed":
+                try:
+                    response = await self._client.chat.completions.create(
+                        **self._request_kwargs(request, response_format_override="json_object")
+                    )
+                except Exception:
+                    detail = provider_error_detail(exc.body)
+                    diagnostic = f": {detail}" if detail else ""
+                    raise LLMInvalidRequestError(
+                        f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                        f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                    ) from exc
+            else:
+                detail = provider_error_detail(exc.body)
+                diagnostic = f": {detail}" if detail else ""
+                raise LLMInvalidRequestError(
+                    f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
+        except openai.NotFoundError as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMInvalidRequestError(
+                f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
+        except openai.InternalServerError as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMProviderUnavailableError(
+                f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
         except openai.APIStatusError as exc:
             detail = provider_error_detail(exc.body)
             diagnostic = f": {detail}" if detail else ""
+            if exc.status_code in (401, 402, 403):
+                raise LLMAuthenticationError(
+                    f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
+            if exc.status_code in (400, 404):
+                raise LLMInvalidRequestError(
+                    f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
+            if exc.status_code >= 500:
+                raise LLMProviderUnavailableError(
+                    f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
             raise LLMError(
                 f"{request.purpose}: OpenAI-compatible API error {exc.status_code} "
                 f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
             ) from exc
         except openai.APIConnectionError as exc:
-            raise LLMError(f"{request.purpose}: could not reach the OpenAI-compatible API") from exc
+            raise LLMConnectionError(f"{request.purpose}: could not reach the OpenAI-compatible API") from exc
 
         if not response.choices:
             raise LLMResponseError(f"{request.purpose}: response contained no choices")
@@ -363,10 +433,19 @@ class OpenAIProvider:
 
         text = choice.message.content
         if not text:
+            if getattr(choice.message, "tool_calls", None):
+                tool_names = [getattr(tc.function, "name", "unknown") for tc in choice.message.tool_calls]
+                raise LLMResponseError(
+                    f"{request.purpose}: model returned unexpected native tool calls ({', '.join(tool_names)}) instead of structured JSON"
+                )
             raise LLMResponseError(f"{request.purpose}: response contained no text")
         text = text.strip()
         if match := _FENCE.match(text):
             text = match.group(1)
+        elif "```" in text:
+            fence_match = re.search(r"```(?:json)?\s*\n(.*?)\n```", text, re.DOTALL)
+            if fence_match:
+                text = fence_match.group(1).strip()
         try:
             data = json.loads(text)
         except json.JSONDecodeError as exc:

@@ -2,6 +2,7 @@ import { roleLabel } from "../../lib/labels";
 import { stoppedBecause } from "../../lib/runView";
 import type { FinalResult, ResultArtifact, RunState } from "../../types/api";
 import { Section, TechnicalDetail } from "../ui";
+import MarkdownView from "../ui/MarkdownView";
 
 /**
  * The run's answer: its deliverables (the final pieces of work, as the backend defines them)
@@ -46,8 +47,12 @@ export default function AnswerSection({ state, result }: { state: RunState; resu
         >
           <div className="space-y-8">
             {delivered.map((d) => (
-              <article key={d.task_id} className="max-w-[68ch]">
-                {d.summary && <p className={`leading-relaxed text-pretty whitespace-pre-wrap text-ink ${failed ? "text-[15px]" : "text-lg"}`}>{d.summary}</p>}
+              <article key={d.task_id} className="max-w-[72ch]">
+                {d.summary && (
+                  <div className={`leading-relaxed text-pretty text-ink ${failed ? "text-[15px]" : "text-base"}`}>
+                    <MarkdownView content={d.summary} />
+                  </div>
+                )}
                 {d.artifacts.map((a) => (
                   <ArtifactView key={a.artifact_id} artifact={a} />
                 ))}
@@ -63,7 +68,7 @@ export default function AnswerSection({ state, result }: { state: RunState; resu
   );
 }
 
-/** A flat JSON object as a table; anything else as text. */
+/** A flat JSON object as a table; Markdown/tables as rich formatted view; anything else as text. */
 function ArtifactView({ artifact }: { artifact: ResultArtifact }) {
   const rows = flatJson(artifact);
   return (
@@ -81,8 +86,10 @@ function ArtifactView({ artifact }: { artifact: ResultArtifact }) {
             ))}
           </tbody>
         </table>
+      ) : artifact.media_type.includes("markdown") || artifact.content.includes("|") ? (
+        <MarkdownView content={artifact.content} allowToggleRaw />
       ) : (
-        <pre className="max-h-80 overflow-auto rounded-md bg-raised p-3 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-dim">{artifact.content}</pre>
+        <pre className="max-h-80 overflow-auto rounded-lg border border-line bg-raised p-3 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-dim">{artifact.content}</pre>
       )}
       <figcaption className="mt-1.5 text-xs text-faint">
         {artifact.name}

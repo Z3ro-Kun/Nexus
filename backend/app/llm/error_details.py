@@ -22,6 +22,6 @@ def provider_error_detail(body: Any) -> str | None:
     error = body.get("error", body)
     if not isinstance(error, dict):
         return None
-    fields = ("message", "code", "type", "param")
+    fields = ("message", "code", "type", "param", "failed_generation")
     parts = [f"{name}={error[name]}" for name in fields if isinstance(error.get(name), (str, int, float))]
     return safe_message("; ".join(parts), max_chars=500, default="") or None

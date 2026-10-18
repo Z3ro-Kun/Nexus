@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
-import httpx2
+import httpx as httpx2  # was incorrectly `import httpx2`; httpx provides Request/Response
 import openai
 import pytest
 from openai.types.chat import ChatCompletion
@@ -77,7 +77,11 @@ def completion(
     model: str = "served-model",
     usage: bool = True,
     choices: bool = True,
+    tool_calls: list[Any] | None = None,
 ) -> ChatCompletion:
+    message: dict[str, Any] = {"role": "assistant", "content": content, "refusal": refusal}
+    if tool_calls is not None:
+        message["tool_calls"] = tool_calls
     return ChatCompletion.model_validate(
         {
             "id": "chatcmpl-test",
@@ -88,7 +92,7 @@ def completion(
                 {
                     "index": 0,
                     "finish_reason": finish_reason,
-                    "message": {"role": "assistant", "content": content, "refusal": refusal},
+                    "message": message,
                 }
             ]
             if choices
@@ -859,15 +863,102 @@ async def test_http_429_is_a_rate_limit_error() -> None:
     assert "not a task problem" in caught.value.message and FAKE_KEY not in caught.value.message
 
 
-async def test_other_status_errors_stay_generic_llm_errors() -> None:
+async def test_server_status_error_is_provider_unavailable() -> None:
     provider, _ = adapter(status_error(openai.InternalServerError, 500))
 
     with pytest.raises(LLMError) as caught:
         await provider.generate(request())
-    assert not isinstance(caught.value, LLMRateLimitError) and caught.value.code == "llm_error"
+    assert not isinstance(caught.value, LLMRateLimitError)
+    assert caught.value.code == "llm_provider_unavailable" and "500" in caught.value.message
+
+
+async def test_auth_status_error_is_authentication_error() -> None:
+    from app.core.exceptions import LLMAuthenticationError
+    provider, _ = adapter(status_error(openai.AuthenticationError, 401))
+
+    with pytest.raises(LLMAuthenticationError) as caught:
+        await provider.generate(request())
+    assert caught.value.code == "llm_authentication_error" and "401" in caught.value.message
+
+
+async def test_payment_required_402_is_authentication_error() -> None:
+    from app.core.exceptions import LLMAuthenticationError
+    provider, _ = adapter(status_error(openai.APIStatusError, 402))
+
+    with pytest.raises(LLMAuthenticationError) as caught:
+        await provider.generate(request())
+    assert caught.value.code == "llm_authentication_error" and "402" in caught.value.message
+
+
+async def test_connection_error_is_llm_connection_error() -> None:
+    from app.core.exceptions import LLMConnectionError
+    provider, _ = adapter(openai.APIConnectionError(request=REQ))
+
+    with pytest.raises(LLMConnectionError) as caught:
+        await provider.generate(request())
+    assert caught.value.code == "llm_connection_error" and "could not reach" in caught.value.message
+
+
+async def test_bad_request_error_is_invalid_request() -> None:
+    from app.core.exceptions import LLMInvalidRequestError
+    provider, _ = adapter(status_error(openai.BadRequestError, 400))
+
+    with pytest.raises(LLMInvalidRequestError) as caught:
+        await provider.generate(request())
+    assert caught.value.code == "llm_invalid_request" and "400" in caught.value.message
+
+
+async def test_not_found_404_is_invalid_request() -> None:
+    from app.core.exceptions import LLMInvalidRequestError
+    provider, _ = adapter(status_error(openai.NotFoundError, 404))
+
+    with pytest.raises(LLMInvalidRequestError) as caught:
+        await provider.generate(request())
+    assert caught.value.code == "llm_invalid_request" and "404" in caught.value.message
+
+
+async def test_unexpected_native_tool_call_without_text_raises_informative_error() -> None:
+    tool_call = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "http_fetch", "arguments": "{}"},
+    }
+    provider, _ = adapter(completion(None, tool_calls=[tool_call]))
+
+    with pytest.raises(LLMResponseError, match="unexpected native tool calls.*http_fetch"):
+        await provider.generate(request())
+
+
+async def test_markdown_fence_with_surrounding_commentary_is_extracted() -> None:
+    provider, _ = adapter(completion('Here is the requested output:\n```json\n{"answer": "extracted"}\n```\nHope that helps!'))
+
+    response = await provider.generate(request())
+    assert response.data == {"answer": "extracted"}
 
 
 def test_narrowed_replanner_schemas_are_strict_compatible() -> None:
     replanner = ReplannerAgent(FakeLLMProvider(), TASK_AGENT_SPECS, max_tokens=100)
     for schema in (replanner.output_schema(failed_task_id="t1"), replanner.output_schema(remediation=True)):
         assert is_strict_compatible(schema)
+
+
+async def test_groq_json_validate_failed_falls_back_to_json_object() -> None:
+    calls_made: list[dict[str, Any]] = []
+
+    def mock_create(kwargs: dict[str, Any]) -> ChatCompletion:
+        calls_made.append(kwargs)
+        if kwargs["response_format"].get("type") == "json_schema":
+            raise openai.BadRequestError(
+                "Failed to generate JSON",
+                response=httpx2.Response(400, request=REQ),
+                body={"error": {"code": "json_validate_failed", "message": "Failed to generate JSON."}},
+            )
+        return completion('{"answer": "fallback_success"}')
+
+    provider, _ = adapter(mock_create)
+    response = await provider.generate(request())
+
+    assert response.data == {"answer": "fallback_success"}
+    assert len(calls_made) == 2
+    assert calls_made[0]["response_format"]["type"] == "json_schema"
+    assert calls_made[1]["response_format"]["type"] == "json_object"

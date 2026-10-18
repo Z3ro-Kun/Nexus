@@ -37,7 +37,7 @@ async def test_get_events(api: httpx.AsyncClient) -> None:
     [event] = response.json()
     assert event["sequence"] == 1
     assert event["event_type"] == "RunCreated"
-    assert event["payload"] == {"goal": "Plan a trip", "constraints": []}
+    assert event["payload"] == {"goal": "Plan a trip", "constraints": [], "documents": []}
     assert event["run_id"] == run["id"]
 
 

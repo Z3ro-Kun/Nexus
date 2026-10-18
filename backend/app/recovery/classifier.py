@@ -30,8 +30,13 @@ ERROR_TYPE_FAILURES: dict[str, FailureType] = {
     "llm_timeout": FailureType.TIMEOUT,
     # the agent / model failed
     "llm_error": FailureType.AGENT_FAILURE,
-    # the LLM provider refused service (HTTP 429): an availability problem, not the task's
+    # LLM provider / infrastructure problems (not task problems): never replanned
     "llm_rate_limited": FailureType.PROVIDER_FAILURE,
+    "llm_authentication_error": FailureType.PROVIDER_FAILURE,
+    "llm_connection_error": FailureType.PROVIDER_FAILURE,
+    "llm_provider_unavailable": FailureType.PROVIDER_FAILURE,
+    "llm_invalid_request": FailureType.PROVIDER_FAILURE,
+    "llm_misconfigured": FailureType.PROVIDER_FAILURE,
     "tool_limit": FailureType.AGENT_FAILURE,
     "agent_reported_failure": FailureType.AGENT_FAILURE,
     "executor_error": FailureType.AGENT_FAILURE,

@@ -30,7 +30,7 @@ from app.tools.schemas import ToolContext, ToolDefinition
 
 REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 TEXT_TYPES = ("text/", "application/json", "application/xml", "application/xhtml+xml")
-USER_AGENT = "NEXUS-http-fetch/0.1 (+controlled agent tool)"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
 class Header(BaseModel):

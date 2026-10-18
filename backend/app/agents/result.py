@@ -66,6 +66,21 @@ class AgentStep(BaseModel):
     tool_call: ToolCall | None = None
     report: AgentReport | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _sanitize(cls, data: object) -> object:
+        if isinstance(data, dict):
+            action = data.get("action")
+            if action == "call_tool":
+                if data.get("tool_call") is not None and data.get("report") is not None:
+                    data = dict(data)
+                    data["report"] = None
+            elif action == "finish":
+                if data.get("report") is not None and data.get("tool_call") is not None:
+                    data = dict(data)
+                    data["tool_call"] = None
+        return data
+
     @model_validator(mode="after")
     def _one_of(self) -> "AgentStep":
         """Exactly one of tool_call / report, matching `action`. Each violation is named,

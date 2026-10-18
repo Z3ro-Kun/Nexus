@@ -14,10 +14,18 @@ class RunRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, goal: str) -> Run:
+    async def create(
+        self,
+        goal: str,
+        *,
+        conversation_id: UUID | None = None,
+        parent_run_id: UUID | None = None,
+    ) -> Run:
         now = utc_now()
         run = Run(
             id=uuid4(),
+            conversation_id=conversation_id,
+            parent_run_id=parent_run_id,
             goal=goal,
             status=RunStatus.CREATED.value,
             last_sequence=0,
@@ -27,6 +35,16 @@ class RunRepository:
         self._session.add(run)
         await self._session.flush()
         return run
+
+    async def list_for_conversation(self, conversation_id: UUID) -> list[Run]:
+        from sqlalchemy import select
+        stmt = (
+            select(Run)
+            .where(Run.conversation_id == conversation_id)
+            .order_by(Run.created_at.asc())
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get(self, run_id: UUID) -> Run | None:
         return await self._session.get(Run, run_id, populate_existing=True)

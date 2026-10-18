@@ -32,10 +32,29 @@ export interface Clarification {
 /** Task status in projected state (TaskStatus). pending/ready/blocked are derived from dependencies. */
 export type TaskStatus = "pending" | "ready" | "running" | "completed" | "failed" | "blocked" | "cancelled";
 
+export interface AttachedDocument {
+  id: string;
+  filename: string;
+  content_type: string;
+  content: string;
+}
+
+export interface DocumentRead {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  char_count: number;
+  content_preview: string;
+  created_at: string;
+}
+
 /** POST /runs request body (RunCreate). `goal`: 1 to 10,000 characters. */
 export interface RunCreate {
   goal: string;
   constraints?: string[];
+  document_ids?: string[];
+  attached_documents?: AttachedDocument[];
 }
 
 /** POST /runs and GET /runs/{id} response (RunRead). */

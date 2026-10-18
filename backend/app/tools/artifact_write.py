@@ -33,6 +33,10 @@ TOOL_NAME = "artifact_write"
 MAX_FILES_PER_CALL = 50
 # Shown to the planner and replanner: how deliverable files are produced and packaged.
 PLANNING_NOTE = (
+    "IMPORTANT: Only use or plan artifact_write if the user explicitly requested a file, document, "
+    "script, code project, or downloadable artifact (e.g. 'write a file', 'create a project', 'generate a script'). "
+    "Do NOT plan artifact_write for conversational questions, information requests, or lists—those must be returned "
+    "directly in chat form as text in the agent's report summary. "
     "Packaging is automatic: when a task writes a project, NEXUS validates it and packages it "
     "as a ZIP, and delivers it after verification. Never plan a task whose purpose is to "
     "package, zip, bundle, collect or copy generated files; an agent cannot read files written "

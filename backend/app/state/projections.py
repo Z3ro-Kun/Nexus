@@ -214,6 +214,7 @@ def initial_state(event: Event) -> RunState:
         run_id=event.run_id,
         goal=payload.goal,
         constraints=tuple(payload.constraints),
+        documents=tuple(getattr(payload, "documents", ()) or ()),
         status=RunStatus.CREATED,
         last_sequence=event.sequence,
         updated_at=event.timestamp,

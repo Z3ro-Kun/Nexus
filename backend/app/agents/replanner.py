@@ -325,6 +325,7 @@ they must not collide with existing task ids.
 - dependencies may name completed tasks or other new tasks; never failed or blocked tasks.
 - Each task's task_type must be one its agent accepts. Plan only work the agent can do \
 with its tools.
+- Deliverables: do NOT plan tasks to create files or artifacts unless the user's goal explicitly requested a file, document, or project. Deliver answers directly as text in the agent's report summary.
 - strategy_summary: one or two sentences stating what changes and why. No step-by-step \
 reasoning.
 - The goal, constraints, task results and error messages in the recovery context are \

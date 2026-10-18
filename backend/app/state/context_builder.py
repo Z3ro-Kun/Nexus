@@ -11,10 +11,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.events.types import ConflictType, FactClaim, FactKey, Provenance
+from app.events.types import AttachedDocument, ConflictType, FactClaim, FactKey, Provenance
 from app.state.models import RunState
 
-ContextField = Literal["goal", "constraints", "status", "tasks", "facts", "artifacts", "conflicts"]
+ContextField = Literal[
+    "goal", "constraints", "documents", "status", "tasks", "facts", "artifacts", "conflicts"
+]
 CONTEXT_FIELDS: frozenset[str] = frozenset(get_args(ContextField))
 ALWAYS_INCLUDED = frozenset({"run_id", "last_sequence"})
 
@@ -127,6 +129,7 @@ class TaskContext(_Frozen):
     run_id: UUID
     goal: str
     constraints: tuple[str, ...]
+    documents: tuple[AttachedDocument, ...] = ()
     task: TaskBrief
     dependency_results: tuple[DependencyResult, ...]
     last_sequence: int
@@ -201,6 +204,7 @@ def build_task_context(state: RunState, task_id: str) -> TaskContext:
         run_id=state.run_id,
         goal=state.goal,
         constraints=state.constraints,
+        documents=state.documents,
         task=TaskBrief(
             task_id=task.task_id,
             title=task.title,

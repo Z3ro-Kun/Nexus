@@ -63,9 +63,41 @@ class PlanningService:
             # One plan per run; replanning is not implemented.
             raise PlanAlreadyExistsError(f"run {run_id} already has {len(state.tasks)} tasks")
 
+        # Collect conversation history if this run belongs to a multi-turn conversation
+        conversation_history: list[dict[str, Any]] = []
+        try:
+            run_model = await self._runs.get_run(run_id)
+            if run_model.conversation_id:
+                prior_runs = await self._runs._runs.list_for_conversation(run_model.conversation_id)
+                for pr in prior_runs:
+                    if pr.id == run_id:
+                        break
+                    pr_events = await self._runs.get_events(pr.id)
+                    from app.state.projector import project
+                    pr_state = project(pr_events) if pr_events else None
+                    if pr_state:
+                        turn_facts = [f.content for f in pr_state.facts.values()]
+                        turn_summary = None
+                        for t in pr_state.tasks.values():
+                            if t.status.value == "completed" and t.description:
+                                turn_summary = t.description
+                        conversation_history.append({
+                            "user": pr_state.goal,
+                            "assistant_summary": turn_summary,
+                            "facts": turn_facts,
+                        })
+        except Exception:
+            pass
+
         try:
             plan = await asyncio.wait_for(
-                self._planner.plan(state.goal, state.constraints, max_tasks=self._max_tasks),
+                self._planner.plan(
+                    state.goal,
+                    state.constraints,
+                    documents=state.documents,
+                    conversation_history=conversation_history,
+                    max_tasks=self._max_tasks,
+                ),
                 self._timeout,
             )
         except asyncio.TimeoutError:

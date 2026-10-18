@@ -20,7 +20,7 @@ summary are stored as data and never interpreted.
 
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.core.exceptions import LLMResponseError
 from app.core.redaction import safe_message
@@ -53,6 +53,42 @@ class VerifierOutput(BaseModel):
     objective: LLMJudgement
     constraints: list[LLMConstraintJudgement] = Field(max_length=20)
     summary: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sanitize(cls, data: object) -> object:
+        if isinstance(data, dict):
+            data = dict(data)
+            obj = data.get("objective")
+            if isinstance(obj, dict):
+                obj = dict(obj)
+                if "summary" in obj:
+                    if not data.get("summary"):
+                        data["summary"] = str(obj["summary"])[:1000]
+                    if not obj.get("explanation") and obj.get("summary"):
+                        obj["explanation"] = str(obj["summary"])[:1000]
+                    del obj["summary"]
+                if "constraints" in obj:
+                    if not data.get("constraints"):
+                        data["constraints"] = obj["constraints"]
+                    del obj["constraints"]
+                data["objective"] = obj
+
+            constraints = data.get("constraints")
+            if isinstance(constraints, list):
+                new_constraints = []
+                for c in constraints:
+                    if isinstance(c, dict) and "summary" in c:
+                        c = dict(c)
+                        if not c.get("explanation") and c.get("summary"):
+                            c["explanation"] = str(c["summary"])[:1000]
+                        del c["summary"]
+                    new_constraints.append(c)
+                data["constraints"] = new_constraints
+            elif constraints is None:
+                data["constraints"] = []
+        return data
+
 
 
 VERIFIER_SYSTEM = """\

@@ -71,7 +71,7 @@ class RecoveryPolicy:
                 action=RecoveryAction.FAIL_RUN,
                 reason=(
                     f"LLM provider unavailable: task {failure.task_id!r} failed ({failure.error_type}): "
-                    f"{failure.message} Not replanned: a different plan cannot fix a provider rate limit."
+                    f"{failure.message} Not replanned: a different plan cannot fix a provider failure."
                 ),
             )
         task = state.tasks[failure.task_id]

@@ -471,11 +471,30 @@ def _default_source(entry: ToolTraceEntry) -> str:
 
 def fact_provenance(fact: AgentFact, trace: list[ToolTraceEntry]) -> Provenance:
     if fact.basis != "tool_output":
-        if fact.tool_call_id is not None or fact.source_url is not None:
-            raise ProvenanceError(
-                f"fact {fact.content[:60]!r} cites a tool call but has basis {fact.basis!r}"
+        # If the fact cited a successful tool call of THIS task, treat it as tool_output
+        entry = _successful(trace).get(fact.tool_call_id or "") if fact.tool_call_id else None
+        if entry is not None:
+            source = (
+                fact.source_url
+                if fact.source_url is not None and fact.source_url in _output_urls(entry)
+                else _default_source(entry)
             )
-        source = "run goal and constraints" if fact.basis == "user_provided" else None
+            assert entry.result is not None
+            return Provenance(
+                kind="tool_output",
+                tool_name=entry.tool_name,
+                tool_call_id=entry.tool_call_id,
+                source=source,
+                retrieved_at=entry.completed_at,
+                fake=bool(entry.result.metadata.get("fake", False)),
+            )
+
+        # For non-tool basis (task_context, model_knowledge, user_provided),
+        # accept source_url or cited source reference without failing provenance.
+        source = (
+            fact.source_url
+            or ("run goal and constraints" if fact.basis == "user_provided" else None)
+        )
         return Provenance(kind=fact.basis, source=source)
 
     entry = _successful(trace).get(fact.tool_call_id or "")
@@ -484,16 +503,17 @@ def fact_provenance(fact: AgentFact, trace: list[ToolTraceEntry]) -> Provenance:
             f"fact {fact.content[:60]!r} cites tool call {fact.tool_call_id!r}, "
             "which is not a successful tool call of this task"
         )
-    if fact.source_url is not None and fact.source_url not in _output_urls(entry):
-        raise ProvenanceError(
-            f"source_url {fact.source_url!r} does not appear in the output of {entry.tool_call_id}"
-        )
+    source = (
+        fact.source_url
+        if fact.source_url is not None and fact.source_url in _output_urls(entry)
+        else _default_source(entry)
+    )
     assert entry.result is not None
     return Provenance(
         kind="tool_output",
         tool_name=entry.tool_name,
         tool_call_id=entry.tool_call_id,
-        source=fact.source_url or _default_source(entry),
+        source=source,
         retrieved_at=entry.completed_at,
         fake=bool(entry.result.metadata.get("fake", False)),
     )

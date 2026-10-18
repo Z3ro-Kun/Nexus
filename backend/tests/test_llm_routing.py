@@ -360,7 +360,7 @@ async def test_groq_request_is_strict_json_schema_without_native_tools(monkeypat
      (400, "BadRequestError", "400")],
 )
 async def test_groq_errors_map_to_nexus_errors(monkeypatch: pytest.MonkeyPatch, status: int, error_cls: str, match: str) -> None:
-    import httpx2
+    import httpx as httpx2  # was incorrectly `import httpx2`
     import openai
 
     router = groq_router(monkeypatch)
@@ -372,7 +372,7 @@ async def test_groq_errors_map_to_nexus_errors(monkeypatch: pytest.MonkeyPatch, 
 
 
 async def test_groq_timeout_and_truncation_map_to_nexus_errors(monkeypatch: pytest.MonkeyPatch) -> None:
-    import httpx2
+    import httpx as httpx2  # was incorrectly `import httpx2`
     import openai
 
     from app.core.exceptions import LLMResponseError, LLMTimeoutError

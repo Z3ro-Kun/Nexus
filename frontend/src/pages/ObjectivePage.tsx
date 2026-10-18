@@ -13,7 +13,7 @@ export default function ObjectivePage() {
       </h1>
 
       <div className="mt-8">
-        <ObjectiveForm busy={creating} onSubmit={(goal) => void start(goal)} />
+        <ObjectiveForm busy={creating} onSubmit={(goal, docIds) => void start(goal, docIds)} />
         {error && (
           <div role="alert" className="mt-4 border-l-2 border-bad pl-4 text-sm">
             <p className="font-medium text-bad">Could not create the run.</p>

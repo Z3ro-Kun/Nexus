@@ -17,6 +17,7 @@ const RUN_READS: Record<string, Handler> = {
 };
 
 function setup(routes: Record<string, Handler>) {
+  window.history.replaceState(null, "", "/objective");
   const calls = stubFetch({ ...HEALTH, ...routes });
   const user = userEvent.setup();
   render(<App />);
@@ -136,7 +137,7 @@ describe("Objective page", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not create the run.");
     expect(alert).toHaveTextContent("Can't reach the NEXUS backend");
-    expect(window.location.pathname).toBe("/");
+    expect(window.location.pathname).toBe("/objective");
     expect(calls.some((c) => c.path.endsWith("/execute"))).toBe(false);
   });
 });

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import anthropic
-import httpx2
+import httpx as httpx2  # was incorrectly `import httpx2`; httpx provides Request/Response
 import pytest
 from pydantic import BaseModel, Field
 

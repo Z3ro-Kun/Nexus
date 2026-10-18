@@ -11,6 +11,7 @@ and the caller may re-read and retry.
 """
 
 from collections.abc import Sequence
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,12 +34,54 @@ class RunService:
         self._runs = RunRepository(session)
         self._events = EventRepository(session)
 
-    async def create_run(self, goal: str, constraints: Sequence[str] = ()) -> Run:
+    async def create_run(
+        self,
+        goal: str,
+        constraints: Sequence[str] = (),
+        *,
+        conversation_id: UUID | None = None,
+        parent_run_id: UUID | None = None,
+        document_ids: Sequence[UUID] = (),
+        documents: Sequence[Any] = (),
+    ) -> Run:
         """Create the run row and its RunCreated event in one transaction."""
+        from app.models.conversation import Conversation
+
+        if conversation_id is None:
+            now = utc_now()
+            conv = Conversation(
+                id=uuid4(),
+                title=goal[:60].strip() or "New Conversation",
+                created_at=now,
+                updated_at=now,
+            )
+            self._session.add(conv)
+            await self._session.flush()
+            conversation_id = conv.id
+
+        all_docs: list[dict[str, Any]] = [
+            d.model_dump() if hasattr(d, "model_dump") else dict(d) for d in documents
+        ]
+        if document_ids:
+            from app.documents.service import DocumentService
+            doc_service = DocumentService(self._session)
+            persisted_docs = await doc_service.get_documents(document_ids)
+            for pd in persisted_docs:
+                all_docs.append(DocumentService.to_attached_document(pd).model_dump())
+
         created = new_event(
-            EventType.RUN_CREATED, {"goal": goal, "constraints": list(constraints)}
+            EventType.RUN_CREATED,
+            {
+                "goal": goal,
+                "constraints": list(constraints),
+                "documents": all_docs,
+            },
         )
-        run = await self._runs.create(goal)
+        run = await self._runs.create(
+            goal,
+            conversation_id=conversation_id,
+            parent_run_id=parent_run_id,
+        )
         await self._events.append(run.id, [created], expected_sequence=0)
         await self._session.commit()
         return await self.get_run(run.id)

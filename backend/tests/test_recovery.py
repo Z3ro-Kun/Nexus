@@ -472,6 +472,27 @@ def test_rate_limit_fails_the_run_honestly_without_a_replan() -> None:
     assert "LLM provider unavailable" in RecoveryPolicy(0).decide(failure_record(state, A), state).reason
 
 
+@pytest.mark.parametrize(
+    "error_type",
+    ["llm_authentication_error", "llm_connection_error", "llm_provider_unavailable", "llm_invalid_request", "llm_misconfigured"],
+)
+def test_all_provider_failures_are_classified_as_provider_failure(error_type: str) -> None:
+    result = TaskExecutionResult.failure(f"agent:researcher: failed with {error_type}", error_type=error_type)
+    classification = classify_result(result)
+    assert (classification.failure_type, classification.error_type) == (F.PROVIDER_FAILURE, error_type)
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    ["llm_authentication_error", "llm_connection_error", "llm_provider_unavailable", "llm_invalid_request", "llm_misconfigured"],
+)
+def test_all_provider_failures_fail_the_run_without_replan(error_type: str) -> None:
+    state = base_state(F.PROVIDER_FAILURE, error_type)
+    decision = RecoveryPolicy(2).decide(failure_record(state, A), state)
+    assert decision.action is RecoveryAction.FAIL_RUN
+    assert "Not replanned" in decision.reason and error_type in decision.reason
+
+
 @pytest.mark.parametrize(("failure_type", "error_type"), [(F.AGENT_FAILURE, "llm_error"), (F.TOOL_FAILURE, "http_error"),
                                                           (F.TIMEOUT, "agent_timeout"), (F.VALIDATION_FAILURE, "llm_invalid_response")])
 def test_other_failures_keep_their_recovery_behaviour(failure_type: FailureType, error_type: str) -> None:

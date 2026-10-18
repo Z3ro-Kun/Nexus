@@ -19,7 +19,7 @@ class SearchQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(min_length=1, max_length=400)
-    max_results: int = Field(default=5, ge=1, le=10)
+    max_results: int = Field(default=8, ge=1, le=10)
 
 
 class SearchResult(BaseModel):

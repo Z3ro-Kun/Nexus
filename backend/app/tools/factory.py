@@ -3,7 +3,7 @@
 What is available in a deployment:
 - calculator: always (pure, offline, safe evaluator);
 - http_fetch: only if NEXUS_HTTP_FETCH_ENABLED=true (real outbound network, SSRF-guarded);
-- web_search: never yet (no real search backend implemented);
+- web_search: if NEXUS_WEB_SEARCH_ENABLED (DuckDuckGo by default, or Tavily/Serper);
 - python_analysis: never (no sandbox available; see app.tools.python_analysis);
 - artifact_write: if NEXUS_ARTIFACTS_ENABLED (writes only into the artifact workspace).
 Fake tools are never registered here.
@@ -17,6 +17,8 @@ from app.tools.calculator import CalculatorTool
 from app.tools.http_fetch import HTTPFetchTool
 from app.tools.policy import ToolPolicy
 from app.tools.registry import ToolRegistry
+from app.tools.search_backends import build_search_backend
+from app.tools.web_search import WebSearchTool
 
 
 def build_artifact_workspace(settings: Settings) -> ArtifactWorkspace | None:
@@ -52,6 +54,9 @@ def build_tool_registry(settings: Settings, workspace: ArtifactWorkspace | None 
                 max_timeout_seconds=settings.http_fetch_max_timeout_seconds,
             )
         )
+    if settings.web_search_enabled:
+        backend = build_search_backend(settings)
+        registry.register(WebSearchTool(backend))
     return registry
 
 

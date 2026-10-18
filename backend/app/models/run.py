@@ -33,6 +33,8 @@ class Run(Base):
     __table_args__ = (CheckConstraint("last_sequence >= 0", name="last_sequence_non_negative"),)
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    conversation_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True, index=True)
+    parent_run_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     last_sequence: Mapped[int] = mapped_column(nullable=False, default=0)

@@ -91,6 +91,38 @@ class LLMRateLimitError(LLMError):
     code = "llm_rate_limited"
 
 
+class LLMAuthenticationError(LLMError):
+    """The provider rejected authentication, API key, permissions, or billing/credits (HTTP 401/403).
+    A provider credential/account problem, not a task problem: recovery does not replan it."""
+
+    status_code = 401
+    code = "llm_authentication_error"
+
+
+class LLMConnectionError(LLMError):
+    """Network connection failure, DNS resolution failure, or unreachable endpoint.
+    A network/provider availability problem, not a task problem: recovery does not replan it."""
+
+    status_code = 503
+    code = "llm_connection_error"
+
+
+class LLMProviderUnavailableError(LLMError):
+    """The provider returned a server error, 503 Service Unavailable, or outage (HTTP 5xx).
+    A provider infrastructure problem, not a task problem: recovery does not replan it."""
+
+    status_code = 503
+    code = "llm_provider_unavailable"
+
+
+class LLMInvalidRequestError(LLMError):
+    """The provider rejected the request payload (HTTP 400), e.g. invalid parameter or unsupported schema.
+    A schema/request problem, not a task failure: recovery does not replan it."""
+
+    status_code = 400
+    code = "llm_invalid_request"
+
+
 class LLMResponseError(LLMError):
     """The provider answered, but not with a usable structured response."""
 

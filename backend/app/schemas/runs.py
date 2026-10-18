@@ -6,7 +6,9 @@ from app.agents.planner import ClarificationRequest
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.events.types import (
+    ActionCategory,
     ArtifactRequirement,
+    AttachedDocument,
     EventType,
     FactRequirement,
     Identifier,
@@ -19,13 +21,19 @@ from app.state.models import ApprovalState, TaskState, VerificationState
 
 class RunCreate(BaseModel):
     goal: str = Field(min_length=1, max_length=10_000)
+    conversation_id: UUID | None = None
+    parent_run_id: UUID | None = None
     constraints: list[str] = Field(default_factory=list, max_length=20)
+    document_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    attached_documents: list[AttachedDocument] = Field(default_factory=list, max_length=20)
 
 
 class RunRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    conversation_id: UUID | None = None
+    parent_run_id: UUID | None = None
     goal: str
     status: RunStatus
     last_sequence: int

@@ -74,7 +74,16 @@ ServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 @router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
 async def create_run(body: RunCreate, service: ServiceDep) -> RunRead:
-    return RunRead.model_validate(await service.create_run(body.goal, body.constraints))
+    return RunRead.model_validate(
+        await service.create_run(
+            body.goal,
+            body.constraints,
+            conversation_id=body.conversation_id,
+            parent_run_id=body.parent_run_id,
+            document_ids=body.document_ids,
+            documents=body.attached_documents,
+        )
+    )
 
 
 @router.get("/{run_id}", response_model=RunRead)

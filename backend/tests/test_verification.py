@@ -611,3 +611,13 @@ def test_no_deletion_or_mutation_of_history() -> None:
         for vid, v in earlier.verifications.items():
             if v.status in (VerificationStatus.PASSED, VerificationStatus.FAILED):
                 assert later.verifications[vid] == v
+
+
+async def test_verifier_output_with_objective_summary_sanitized() -> None:
+    # Verifier output where model included summary inside objective is sanitized and accepted
+    raw = verifier_output(constraints=[judgement(evidence=["ra.f1", "compare.a1"])])
+    raw["objective"]["summary"] = "Extra summary emitted by model"
+    result = await assess(raw)
+    assert result.passed
+    assert result.objective.passed
+

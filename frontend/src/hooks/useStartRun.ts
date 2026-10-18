@@ -15,13 +15,14 @@ export function useStartRun() {
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
 
-  const start = useCallback(async (goal: string) => {
+  const start = useCallback(async (goal: string, documentIds?: string[]) => {
     if (busy.current) return; // no duplicate submission while a request is in flight
     busy.current = true;
     setCreating(true);
     setError(null);
     try {
-      const run = await createRun({ goal });
+      const payload = documentIds && documentIds.length > 0 ? { goal, document_ids: documentIds } : { goal };
+      const run = await createRun(payload);
       rememberRun(run.id);
       startExecution(run.id);
       navigate(runPath(run.id));

@@ -288,6 +288,14 @@ class Scheduler:
                 await self._fail_run(run_id, run_failure)
             elif self._completion is not None:
                 blockers = await self._completion.complete_if_ready(run_id)
+                if blockers:
+                    state = await self._load_state(run_id)
+                    failed_tasks = [
+                        t for t in state.tasks.values() if t.status is TaskStatus.FAILED and not t.replaced_by
+                    ]
+                    if failed_tasks and not any(t.status is TaskStatus.RUNNING for t in state.tasks.values()):
+                        first_err = failed_tasks[0].error or f"task '{failed_tasks[0].task_id}' failed"
+                        await self._fail_run(run_id, f"run stopped: {first_err}")
         except BaseException:
             for execution in in_flight:
                 execution.cancel()

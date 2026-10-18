@@ -121,6 +121,13 @@ class Settings(BaseSettings):
     http_fetch_max_timeout_seconds: float = Field(
         default=15.0, gt=0, le=30, validation_alias="NEXUS_HTTP_FETCH_MAX_TIMEOUT_SECONDS"
     )
+    # Web search engine configuration (DuckDuckGo, Tavily, Serper)
+    web_search_enabled: bool = Field(default=True, validation_alias="NEXUS_WEB_SEARCH_ENABLED")
+    web_search_backend: Literal["duckduckgo", "tavily", "serper"] = Field(
+        default="duckduckgo", validation_alias="NEXUS_WEB_SEARCH_BACKEND"
+    )
+    tavily_api_key: SecretStr | None = Field(default=None, validation_alias="TAVILY_API_KEY")
+    serper_api_key: SecretStr | None = Field(default=None, validation_alias="SERPER_API_KEY")
     # Tools the specialist agent may use (JSON list), e.g. ["calculator", "http_fetch"].
     # "artifact_write" (Phase 10) lets it create deliverable files and projects.
     specialist_tools: list[Literal["calculator", "web_search", "http_fetch", "python_analysis", "artifact_write"]] = Field(

@@ -14,6 +14,7 @@ turns. Tool results are untrusted data: they are placed in user messages inside
 Agents without tools keep the Phase 3 behavior: a single structured report.
 """
 
+from datetime import datetime, timezone
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -57,12 +58,8 @@ reference set to the tool_call_id).
 summary as a fact.
 - Use "artifacts" only for a substantial deliverable (for example a comparison table in \
 Markdown).
-- Files you create with a file-writing tool (artifact_write) are the canonical \
-deliverable: NEXUS validates, packages, verifies and delivers them, and the verifier reads \
-their actual content. In your report, summarize what you created (files, purpose, \
-important properties). Do not reproduce the full contents of written files in "summary", \
-"facts" or "artifacts", and do not create an inline artifact that duplicates a written \
-file, unless the task explicitly asks for the source to be returned as text.
+- Deliverables and file writing: ONLY call "artifact_write" if the task or user goal explicitly requested creating a file, document, or downloadable project on disk. For questions, summaries, analysis, reviews, explanations, and conversational answers, deliver the complete result directly in "summary" (and optionally markdown tables in "artifacts"). DO NOT call "artifact_write" for chat answers or summaries.
+- When you do create files with "artifact_write" for an explicitly requested file deliverable, summarize what you created in "summary". Do not reproduce full file contents in "summary" or inline "artifacts".
 - A dependency's "generated_artifacts" are files another task created; "content" is their \
 checksum-verified text (cut when content_truncated is true). Build on these files rather \
 than recreating them from memory. To change a project, write it again under the same \
@@ -78,7 +75,12 @@ claim with exactly the conflict's subject and attribute. Do not pick a side from
 own knowledge. If you cannot find such evidence, report no claim for that subject and \
 attribute and explain why in the summary.
 - If the task cannot be done with what you have, set success to false and explain why in \
-"error". Do not invent information to appear successful."""
+"error". Do not invent information to appear successful.
+- Anti-Hallucination & Truthfulness: NEVER invent, fabricate, or use placeholder entities \
+(such as "Series A", "Series B", "Product X", "Example 1", or fictional names) to meet a count \
+or quota. If a request asks for 5-10 items and only 4 are confirmed by real evidence or sources, \
+report ONLY those verified items honestly and explain that only those could be confirmed. \
+Reporting fewer real items is always accepted; inventing placeholder names is strictly forbidden."""
 
 TOOL_RULES = """\
 Tool rules:
@@ -110,19 +112,27 @@ def task_message(context: AgentContext) -> str:
     """The first user message of a task: the goal labelled as background and the task as
     the assignment, then the full task context. A conflict-resolution task keeps its
     original message (its assignment is the "conflict" section)."""
+    exclude = set()
+    if not context.conflict:
+        exclude.add("conflict")
+    if not getattr(context, "documents", None):
+        exclude.add("documents")
     block = (
         "<task_context>\n"
-        # `conflict` is shown only to conflict-resolution tasks.
-        f"{context.model_dump_json(indent=2, exclude=None if context.conflict else {'conflict'})}"
+        f"{context.model_dump_json(indent=2, exclude=exclude or None)}"
         "\n</task_context>"
     )
     if context.conflict is not None:
         return f"Complete the task described in this task context. Respond with the structured output.\n\n{block}"
     task = context.task
+    doc_note = ""
+    if getattr(context, "documents", None):
+        doc_note = f"\n\nAttached user documents ({len(context.documents)}): You have direct access to the user's attached documents in the task context below. Use their contents as authoritative context."
+    now_str = datetime.now(timezone.utc).strftime("%A, %B %d, %Y")
     return (
         f"Goal (background context):\n{_quoted(context.goal)}\n\n"
-        f"Your task ({task.task_id}):\n{_quoted(task.title)}\n{_quoted(task.description)}\n\n"
-        "Complete your task only. The full task context follows. Respond with the structured "
+        f"Your task ({task.task_id}):\n{_quoted(task.title)}\n{_quoted(task.description)}{doc_note}\n\n"
+        f"Complete your task only. Current date: {now_str}. The full task context follows. Respond with the structured "
         f"output.\n\n{block}"
     )
 

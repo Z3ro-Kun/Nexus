@@ -11,7 +11,17 @@ import logging
 
 import anthropic
 
-from app.core.exceptions import LLMContentFilteredError, LLMError, LLMRateLimitError, LLMResponseError, LLMTimeoutError
+from app.core.exceptions import (
+    LLMAuthenticationError,
+    LLMConnectionError,
+    LLMContentFilteredError,
+    LLMError,
+    LLMInvalidRequestError,
+    LLMProviderUnavailableError,
+    LLMRateLimitError,
+    LLMResponseError,
+    LLMTimeoutError,
+)
 from app.llm.error_details import provider_error_detail
 from app.llm.schemas import LLMRequest, LLMResponse, LLMUsage
 
@@ -56,15 +66,51 @@ class AnthropicProvider:
                 f"{request.purpose}: the LLM provider is rate-limiting requests (HTTP 429, request "
                 f"{exc.request_id}); a provider availability problem, not a task problem"
             ) from exc
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMAuthenticationError(
+                f"{request.purpose}: Anthropic API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
+        except (anthropic.BadRequestError, anthropic.NotFoundError) as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMInvalidRequestError(
+                f"{request.purpose}: Anthropic API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
+        except anthropic.InternalServerError as exc:
+            detail = provider_error_detail(exc.body)
+            diagnostic = f": {detail}" if detail else ""
+            raise LLMProviderUnavailableError(
+                f"{request.purpose}: Anthropic API error {exc.status_code} "
+                f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+            ) from exc
         except anthropic.APIStatusError as exc:
             detail = provider_error_detail(exc.body)
             diagnostic = f": {detail}" if detail else ""
+            if exc.status_code in (401, 402, 403):
+                raise LLMAuthenticationError(
+                    f"{request.purpose}: Anthropic API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
+            if exc.status_code in (400, 404):
+                raise LLMInvalidRequestError(
+                    f"{request.purpose}: Anthropic API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
+            if exc.status_code >= 500:
+                raise LLMProviderUnavailableError(
+                    f"{request.purpose}: Anthropic API error {exc.status_code} "
+                    f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
+                ) from exc
             raise LLMError(
                 f"{request.purpose}: Anthropic API error {exc.status_code} "
                 f"({type(exc).__name__}, request {exc.request_id}){diagnostic}"
             ) from exc
         except anthropic.APIConnectionError as exc:
-            raise LLMError(f"{request.purpose}: could not reach the Anthropic API") from exc
+            raise LLMConnectionError(f"{request.purpose}: could not reach the Anthropic API") from exc
 
         if response.stop_reason == "refusal":
             raise LLMContentFilteredError(

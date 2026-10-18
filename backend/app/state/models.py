@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 
 from app.events.types import (
     ActionSpec,
+    AttachedDocument,
     ConflictType,
     Evidence,
     EvidenceRef,
@@ -317,6 +318,7 @@ class RunState(_Frozen):
     run_id: UUID
     goal: str
     constraints: tuple[str, ...] = ()
+    documents: tuple[AttachedDocument, ...] = ()
     status: RunStatus
     tasks: dict[str, TaskState] = {}
     facts: dict[str, Fact] = {}
